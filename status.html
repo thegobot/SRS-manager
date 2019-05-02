@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html
+        xmlns="http://www.w3.org/1999/xhtml"
+        lang="en"
+        >
+<head>
+
+    <title>SRS - status</title>
+
+    <meta name="description" content=""/>
+    <meta name="keywords" content=""/>
+
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/3.4.0/jquery.min.js"></script>
+    <script src="//cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <link rel="stylesheet" href="//stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <link href="//stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
+
+
+</head>
+
+<body>
+
+
+
+    <div id="app" class="container">
+
+        <h1>SRS
+            <template v-if="self">
+            {{self.version}}
+            <span title="pid">#{{self.pid}}</span>
+            <span class="uptime">{{self.srs_uptime.toString().toHHMMSS()}} </span>
+
+            </template>
+        </h1>
+
+        <div id="urls" class="row">
+
+            <a
+                    class="col-auto"
+                    href="#HOME"
+                v-on:click="rawInfo = null"
+            >
+                <i class="fa fa-home" aria-hidden="true"></i> Home
+            </a>
+
+            <a
+                    class="col-auto"
+                v-for="(desc, url) in urls"
+                v-on:click="loadTab(url)"
+                v-bind:href="'#' + url"
+            >
+                {{url}}
+            </a>
+        </div>
+
+        <pre>{{rawInfo}}</pre>
+
+
+        <table class="table table-sm table-hover table-bordered">
+
+            <thead class="thead-dark">
+                <tr class="text-center">
+                    <th>
+                        <button title="Update" type="button" :disabled="updating" v-on:click="updateAll()"><i v-bind:class="{'fa fa-refresh': true, 'fa-spin': updating} " ></i></button>
+                        SRS
+                    </th>
+                    <th>*</th>
+                    <th colspan="2">Video</th>
+                    <th colspan="3">Audio</th>
+                    <th>In kbps</th>
+                    <th>Out kbps</th>
+                    <th>Send</th>
+                    <th>Recv</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                    <th>*</th>
+                </tr>
+
+                <tr class="text-center">
+                    <th>
+                        <template v-if="self && system">
+                            <span title="cpu percent">{{self.cpu_percent.toFixed(2)}}</span> /
+                            <span title="mem percent">{{self.mem_percent.toFixed(2)}}</span> /
+                            <span title="active connections">{{system.conn_srs}}</span>
+                        </template>
+
+                    </th>
+                    <th></th>
+                    <th>codec</th>
+                    <th>size</th>
+                    <th>codec</th>
+                    <th>freq</th>
+                    <th>chan</th>
+                    <th>{{(kbpsIn)}}</th>
+                    <th>{{(kbpsOut)}}</th>
+                    <th>{{bytes(bytesIn)}}</th>
+                    <th>{{bytes(bytesOut)}}</th>
+                    <th></th>
+                    <th>Time</th>
+                    <th>*</th>
+                </tr>
+
+            </thead>
+            <tbody>
+                <template v-for="(app) in apps">
+                    <!--separator-->
+
+                    <tr class="table-secondary">
+                        <th>{{app.app}}</th>
+                        <th>{{app.streams.length}}</th>
+                    </tr>
+
+
+
+                    <template v-for="stream in app.streams">
+
+                        <stream v-bind:stream="stream"></stream>
+
+                        <clients v-show="clientsShow && clientsShow[stream.id]" v-bind:stream="stream.id"></clients>
+
+                    </template>
+
+                </template>
+            </tbody>
+
+        </table>
+
+        <p>
+        SRS http api url:
+        <input type="text" size="50" v-model="settings.url" name="uri" placeholder="http://example.com:1985/api/v1/"/>
+
+        </p>
+        Http auth:
+        <input type="text" v-model="settings.login" name="login" placeholder="login"/>
+        <input type="password" v-model="settings.pass" name="pass" placeholder="password"/>
+        <div v-show="settings.pass"><span class="text-danger">Attention! Login and password are stored in the local storage of the browser as plain text.</span></div>
+        <button type="button" v-on:click="saveSettings()" class="btn btn-success"><i class="fa fa-floppy-o" aria-hidden="true"></i> Save settings</button>
+
+    </div>
+
+    <script type="text/x-template" id="stream-template">
+
+
+        <tr v-bind:data-stream-id="stream.id" v-bind:class="{'text-muted': !stream.publish.active}">
+
+            <td>
+                <a href="#" v-on:click="showClients()">{{stream.name}}</a>
+            </td>
+            <td>{{stream.clients}}</td>
+            <td>{{stream.video ? stream.video.codec +" "+ stream.video.profile +" "+ stream.video.level : ""}}</td>
+            <td>{{stream.video && stream.video.width ? stream.video.width +"x"+ stream.video.height : ""}}</td>
+
+            <td>{{stream.audio ? stream.audio.codec +" "+ stream.audio.profile +" " : ""}}</td>
+            <td>{{stream.audio ? stream.audio.sample_rate : ""}}</td>
+            <td>{{stream.audio ? stream.audio.channel : ""}}</td>
+
+            <td>{{stream.kbps ? stream.kbps.recv_30s : ""}}</td>
+            <td>{{stream.kbps ? stream.kbps.send_30s : ""}}</td>
+
+            <td>{{$root.bytes(stream.recv_bytes)}}</td>
+            <td>{{$root.bytes(stream.send_bytes)}}</td>
+
+
+            <td class="text-center">
+                <i v-if="stream.publish.active" title="active" class="fa fa-refresh text-success fa-spin"></i><span class="sr-only">Загрузка...</span>
+            </td>
+            <td>{{$root.formatLiveTime(stream.live_ms)}}</td>
+            <td>
+                <a class="text-danger" href="#" v-on:click="removeStream(stream)"><i class="fa fa-remove"></i></a>
+            </td>
+
+        </tr>
+
+
+    </script>
+
+    <script type="text/x-template" id="clients-template">
+        <tr>
+            <td colspan="13" class="p-0">
+
+                <table class="clients table-sm">
+
+
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>id</th>
+                            <th>ip</th>
+                            <th>url</th>
+                            <th>pageUrl</th>
+                            <th>tcUrl</th>
+                        </tr>
+                    </thead>
+
+                    <tr v-for="client in clients" v-bind:class="{'table-primary': client.publish}">
+
+                        <td>{{client.id}}</td>
+                        <td>{{client.ip}}</td>
+                        <td><small>{{client.url}}</small></td>
+                        <td><small>{{client.pageUrl}}</small></td>
+                        <td><small>{{client.tcUrl}}</small></td>
+                        <td><a class="text-danger" href="#" v-on:click="removeClient(client)"><i class="fa fa-remove"></i></a></td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+
+
+    </script>
+
+
+    <script>
+        function _log(type){
+
+            if(typeof __debug !== "undefined" && !__debug) return false;
+
+            var args = [].slice.call(arguments);
+            //console.log(args);
+
+            if(typeof console !== 'undefined'){
+                type = type || "debug";
+                if(type in console) {
+                    console[type].apply(console, args[1]);
+                }
+            }
+        }
+
+        function log(){
+            _log("log", arguments);
+        }
+
+        function info(){
+            _log("warn", arguments);
+        }
+
+        function error(){
+            _log("error", arguments);
+        }
+
+
+
+
+
+        var DATA = {
+            urls: null,
+            apps: null,
+            updating: true,
+            clients: {},
+            settings: {},
+            clientsShow: null,
+            system: null,
+            self: null,
+            kbpsIn: 0,
+            kbpsOut: 0,
+            bytesIn: 0,
+            bytesOut: 0,
+            rawInfo: null,
+            streamTime: function(time){
+                return time
+            },
+
+            saveSettings(){
+                if(typeof localStorage !== "undefined"){
+                    try {
+                        localStorage.setItem("srs_settings", JSON.stringify(this.settings));
+                        start();
+                    }catch (e){
+                        error("error save settings", e.message);
+                    }
+                }
+            },
+
+            loadTab: function(url){
+                load(url).then(function(response){
+                    var data = response.data;
+
+
+                    if(!data){
+                        data = response[url];
+                    }
+
+                    DATA.rawInfo = JSON.stringify(data, false, "\t");
+
+                });
+            },
+
+            clientsLoad: function(streamId){
+                var res = [];
+
+                load("clients").then( function(response){
+                    var clients = response.clients, client;
+                    for(var i=0; i < clients.length; i++){
+                        client = clients[i];
+                        if(client.stream === streamId){
+                            if(!DATA.clients[streamId]) DATA.clients[streamId] = [];
+                            DATA.clients[streamId].push(client);
+                        }
+                    }
+
+                });
+
+
+
+                return res;
+
+            },
+
+            bytes: function(bytes){
+
+                var round = function round(v, p){
+                    var rounded = Math.round(v);
+                    if(v != rounded) {
+                        v = v.toFixed(2);
+                        var a = (v).toString().split('.');
+                        if (a.length > 1) {
+                            v = a[0] + "." + a[1].substring(0, p);
+                        }
+                    }else{
+                        v = rounded.toString();
+                    }
+
+                    return v;
+                }
+
+                var fts = function(v){
+                    return round(v, 2);
+                };
+
+                var kb = 1024,
+                    mb = 1024 * kb,
+                    gb = 1024 * mb;
+
+                if      (bytes>=gb) {bytes=fts(bytes/gb)+' GB';}
+                else if (bytes>=mb)    {bytes=fts(bytes/mb)+' MB';}
+                else if (bytes>=kb)       {bytes=fts(bytes/kb)+' KB';}
+                else if (bytes>1)           {bytes=bytes+' b.';}
+                else if (bytes==1)          {bytes=bytes+' b.';}
+                else                        {bytes='0 b.';}
+
+
+                return bytes;
+            },
+
+            formatLiveTime: function(ms){
+                return "";
+            },
+
+            updateStreams: function(){
+                var self = this;
+                load("streams").then( function(response){
+                    var streams = response.streams, stream, apps = {};
+
+                    if(!response.streams) {
+                        error("error load streams, response", response);
+                        return;
+                    };
+
+                    self.kbpsIn = 0;
+                    self.kbpsOut = 0;
+                    self.bytesIn = 0;
+                    self.bytesOut = 0;
+
+                    for(var i=0; i < streams.length; i++){
+                        stream =  streams[i];
+
+                        if(stream.publish.active) {
+                            if (stream.kbps.recv_30s > 0) {
+                                self.kbpsIn += stream.kbps.recv_30s;
+                            }
+
+                            if (stream.kbps.send_30s > 0) {
+                                self.kbpsOut += stream.kbps.send_30s;
+                            }
+
+                            if (stream.send_bytes > 0) {
+                                self.bytesIn += stream.send_bytes;
+                            }
+
+                            if (stream.recv_bytes > 0) {
+                                self.bytesOut += stream.recv_bytes;
+                            }
+                        }
+
+                        if(!apps[stream.app]) apps[stream.app] = {app: stream.app, streams: []};
+                        apps[stream.app].streams.push(stream);
+                    }
+
+                    DATA.apps = apps;
+                    updateClients();
+
+
+                });
+            },
+
+            updateInfo: function(){
+                load("summaries").then( function(response){
+                    if(response.data && response.data.system) {
+                        DATA.system = response.data.system;
+                        DATA.self = response.data.self;
+                    }else{
+                        error("error load infos! Change SRS HTTP API URL", response);
+                    }
+                })
+            },
+
+            updateAll: function(){
+                DATA.updateInfo();
+                DATA.updateStreams();
+            }
+        };
+
+        String.prototype.toHHMMSS = function () {
+            var sec_num = parseInt(this, 10); // don't forget the second param
+            var hours   = Math.floor(sec_num / 3600);
+            var minutes = Math.floor((sec_num - (hours * 3600)) / 60);
+            var seconds = sec_num - (hours * 3600) - (minutes * 60);
+
+            if (hours   < 10) {hours   = "0"+hours;}
+            if (minutes < 10) {minutes = "0"+minutes;}
+            if (seconds < 10) {seconds = "0"+seconds;}
+            return hours+':'+minutes+':'+seconds;
+        };
+
+
+        function load(part){
+            DATA.updating = true;
+            var promise = $.get(DATA.settings.url + "/" + part + (["streams", "clients", "vhosts"].indexOf(part) !== -1 ? "/" : ""));
+
+            promise.then(function(){
+                DATA.updating = false;
+            });
+
+            return promise;
+        }
+
+        function action(action, type){
+            return $.ajax({
+                url: DATA.settings.url + "/" + action,
+                type: type
+            });
+        }
+
+
+        if(typeof localStorage !== "undefined"){
+            try {
+                var settings  = localStorage.getItem("srs_settings");
+                if(settings) {
+                    DATA.settings = JSON.parse(settings);
+                }
+            }catch (e){
+                error("error load settings", e.message);
+            }
+
+            log("settings", DATA.settings);
+        }
+
+        $.ajaxSetup({
+            error: function(xhr, err3, err3){
+                error("error http request", xhr.statusText, xhr.status);
+            },
+            beforeSend: function(xhr){
+                if(DATA.settings.login && DATA.settings.pass) {
+                    log("set http auth headers");
+                    xhr.setRequestHeader("Authorization", "Basic " + btoa(DATA.settings.login + ":" + DATA.settings.pass));
+                }
+            }
+        });
+
+        var app = new Vue({
+            el: '#app',
+            data: DATA,
+
+            created: function(){
+                this.$on("showClients", function(){
+
+                });
+
+            },
+
+
+            components: {
+                stream: {
+                    methods: {
+                        showClients: function(){
+                            if(!this.$root.clientsShow){
+                                this.$root.clientsShow = {};
+                            }
+
+                            var old = this.$root.clientsShow;
+
+                            if(!old[this.stream.id]) {
+                                old[this.stream.id] = true;
+                            }else{
+                                old[this.stream.id] = false;
+                            }
+
+                            this.$root.clientsShow = null;
+                            this.$root.clientsShow = old;
+
+
+
+                            log(this.$root.clientsShow);
+                            //alert(this.stream.id)
+                        },
+                        removeStream: function(){
+                            var publishClientId = this.stream.publish.cid;
+                            var self = this;
+                            if(publishClientId && publishClientId > 0) {
+                                if (confirm("Remove stream " + this.stream.name + " ?")) {
+                                    action("clients/" + publishClientId, "DELETE").then(function (response) {
+                                        if (response.code === 0) {
+                                            self.$el.remove();
+                                        }else{
+                                            alert("error delete stream, code: " + response.code);
+                                        }
+                                    });
+                                }
+                            }else{
+                                alert("Publish client undefined: " + publishClientId);
+                            }
+                        }
+                    },
+                    props: ['stream'],
+                    template: '#stream-template'
+                },
+                clients: {
+                    methods: {
+                        updateClients: function(){
+                            if(!CLIENTS) return [];
+                            var client;
+                            this.clients = [];
+                            log(CLIENTS);
+                            for (var i = 0; i < CLIENTS.length; i++) {
+                                client = CLIENTS[i];
+                                if (client.stream === this.stream) {
+                                    this.clients.push(client);
+                                }
+                            }
+                        },
+
+
+                        removeClient: function(client){
+                            if(client.id > 0) {
+                                if (confirm("Remove client#" + client.id +", "+ client.ip + " ?")) {
+                                    action("clients/" + client.id, "DELETE").then(function (response) {
+                                        if (response.code === 0) {
+                                            //self.$el.remove();
+                                        }else{
+                                            alert("error delete client, code: " + response.code);
+                                        }
+                                    });
+                                }
+                            }else{
+                                alert("Client ID undefined: " + client.id);
+                            }
+                        }
+
+                    },
+                    created: function(){
+
+                        this.$on("updateClients", function(){
+                            this.updateClients();
+                        });
+                    },
+                    data: function(){
+                        return {
+                            clients: []
+                        }
+                    },
+                    props: ['stream'],
+                    template: '#clients-template'
+                }
+
+            }
+        });
+
+        var CLIENTS = null;
+
+        function updateClients(){
+            CLIENTS = false;
+            load("clients").then(function (response) {
+                var clients = response.clients, client;
+                CLIENTS = [];
+                for (var i = 0; i < clients.length; i++) {
+                    client = clients[i];
+                    CLIENTS.push(client);
+                }
+
+
+
+                for(var i=0; i < app.$children.length; i++){
+                    app.$children[i].$emit("updateClients");
+                }
+
+
+            });
+        }
+
+        function start(){
+            load().then(function (response) {
+                DATA.urls = response.urls;
+            });
+
+            DATA.updateAll();
+        }
+
+
+        if(DATA.settings.url) {
+            start();
+        }
+
+
+
+
+    </script>
+
+
+
+
+</body>
+
+</html>
