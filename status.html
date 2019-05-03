@@ -22,7 +22,7 @@
 
 
 
-    <div id="app" class="container">
+    <div id="app" v-bind:class="{'container': !settings.fullLayout, 'container-fluid': settings.fullLayout}">
 
         <h1>SRS
             <template v-if="self">
@@ -55,6 +55,15 @@
 
         <pre>{{rawInfo}}</pre>
 
+        <div class="custom-control custom-checkbox custom-control-inline">
+          <input v-on:change="saveSettings()"  :checked="settings.onlyActiveStreams" type="checkbox" v-model="settings.onlyActiveStreams" name="onlyActiveStreams" class="custom-control-input" id="onlyActiveStreams">
+          <label class="custom-control-label" for="onlyActiveStreams">Only active</label>
+        </div>
+
+        <div class="custom-control custom-checkbox custom-control-inline">
+          <input v-on:change="saveSettings()" :checked="settings.fullLayout" type="checkbox" v-model="settings.fullLayout" name="fullLayout" class="custom-control-input" id="fullLayout">
+          <label class="custom-control-label" for="fullLayout"><i class="fa fa-arrows-h" aria-hidden="true"></i> full</label>
+        </div>
 
         <table class="table table-sm table-hover table-bordered">
 
@@ -71,7 +80,7 @@
                     <th>Out kbps</th>
                     <th>Send</th>
                     <th>Recv</th>
-                    <th>Status</th>
+                    <th></th>
                     <th>Time</th>
                     <th>*</th>
                 </tr>
@@ -96,7 +105,7 @@
                     <th>{{bytes(bytesIn)}}</th>
                     <th>{{bytes(bytesOut)}}</th>
                     <th></th>
-                    <th>Time</th>
+                    <th></th>
                     <th>*</th>
                 </tr>
 
@@ -175,10 +184,11 @@
     </script>
 
     <script type="text/x-template" id="clients-template">
-        <tr>
-            <td colspan="13" class="p-0">
 
-                <table class="clients table-sm">
+        <tr>
+            <td colspan="14" class="p-0">
+                <div class="p-2" v-show="clients.length === 0">No clients</div>
+                <table class="w-100 clients table-sm" v-show="clients.length > 0">
 
 
                     <thead class="table-secondary">
@@ -188,17 +198,21 @@
                             <th>url</th>
                             <th>pageUrl</th>
                             <th>tcUrl</th>
+                            <th></th>
                         </tr>
                     </thead>
 
                     <tr v-for="client in clients" v-bind:class="{'table-primary': client.publish}">
 
                         <td>{{client.id}}</td>
-                        <td>{{client.ip}}</td>
+                        <td class="text-nowrap">
+                            <i class="fa fa-rss text-success" title="publisher" v-show="client.publish"></i>
+                            {{client.ip}}
+                        </td>
                         <td><small>{{client.url}}</small></td>
                         <td><small>{{client.pageUrl}}</small></td>
                         <td><small>{{client.tcUrl}}</small></td>
-                        <td><a class="text-danger" href="#" v-on:click="removeClient(client)"><i class="fa fa-remove"></i></a></td>
+                        <td class="text-center"><a class="text-danger" title="remove client" href="#" v-on:click="removeClient(client)"><i class="fa fa-remove"></i></a></td>
                     </tr>
                 </table>
             </td>
@@ -361,6 +375,11 @@
 
                     for(var i=0; i < streams.length; i++){
                         stream =  streams[i];
+                        var active = stream.publish.active;
+
+                        if(DATA.settings.onlyActiveStreams && !active){
+                            continue;
+                        }
 
                         if(stream.publish.active) {
                             if (stream.kbps.recv_30s > 0) {
